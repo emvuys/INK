@@ -1,0 +1,96 @@
+### INK NFS Backend API Tests
+### IntelliJ IDEA HTTP Client format
+### Click the green arrow next to each request to run it
+
+### Variables - Define at the top of the file
+@baseUrl = http://localhost:8000
+@contentType = application/json
+
+###
+
+### 1. Health Check
+GET http://localhost:8000/health
+
+### 2. Get Public Key (JWKS)
+GET http://localhost:8000/.well-known/jwks.json
+
+### 3. Enroll Package - Register new package
+POST http://localhost:8000/enroll
+Content-Type: application/json
+
+{
+  "order_id": "ORDER-12345",
+  "nfc_uid": "04:1A:2B:3C:4D:5E:6F",
+  "nfc_token": "token_test_abc123",
+  "photo_urls": [
+    "https://example.com/photo1.jpg",
+    "https://example.com/photo2.jpg",
+    "https://example.com/photo3.jpg",
+    "https://example.com/photo4.jpg"
+  ],
+  "photo_hashes": [
+    "hash1234567890abcdef",
+    "hash2234567890abcdef",
+    "hash3234567890abcdef",
+    "hash4234567890abcdef"
+  ],
+  "shipping_address_gps": {
+    "lat": 40.7128,
+    "lng": -74.0060
+  },
+  "customer_phone_last4": "1234",
+  "warehouse_gps": {
+    "lat": 40.7580,
+    "lng": -73.9855
+  }
+}
+
+### 4. Verify Delivery - GPS distance < 100m (auto pass)
+POST http://localhost:8000/verify
+Content-Type: application/json
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 40.7129,
+    "lng": -74.0061
+  },
+  "device_info": "iPhone 14 Pro, iOS 17"
+}
+
+### 5. Verify Delivery - GPS distance > 100m (requires phone)
+POST http://localhost:8000/verify
+Content-Type: application/json
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 40.8000,
+    "lng": -74.1000
+  },
+  "device_info": "iPhone 14 Pro, iOS 17",
+  "phone_last4": "1234"
+}
+
+### 6. Retrieve Proof - Replace with actual proof_id from enroll response
+GET http://localhost:8000/retrieve/proof_ba1687858ce850506a26db2f
+
+### 7. Test Error - Invalid token
+POST http://localhost:8000/verify
+Content-Type: application/json
+
+{
+  "nfc_token": "invalid_token_xyz",
+  "delivery_gps": {
+    "lat": 40.7129,
+    "lng": -74.0061
+  }
+}
+
+### 8. Test Error - Missing required fields
+POST http://localhost:8000/enroll
+Content-Type: application/json
+
+{
+  "order_id": "ORDER-12345"
+}
