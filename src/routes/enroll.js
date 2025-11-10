@@ -42,6 +42,14 @@ router.post('/', async (req, res) => {
     const proofId = generateProofId();
     const keyId = 'key_001';
 
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    if (isDevelopment) {
+      console.log('[ENROLL] Generated proof_id:', proofId);
+      console.log('[ENROLL] Order ID:', order_id);
+      console.log('[ENROLL] NFC UID:', nfc_uid);
+      console.log('[ENROLL] NFC Token (first 8 chars):', nfc_token.substring(0, 8) + '***');
+    }
+
     // Prepare data for signature
     const signatureData = {
       order_id,
@@ -51,7 +59,16 @@ router.post('/', async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
+    if (isDevelopment) {
+      console.log('[ENROLL] Preparing signature data');
+      console.log('[ENROLL] Signature data:', JSON.stringify(signatureData, null, 2));
+    }
+
     const signature = signData(signatureData);
+    
+    if (isDevelopment) {
+      console.log('[ENROLL] Signature generated and stored');
+    }
 
     // Prepare document data
     const proofData = {
@@ -77,7 +94,16 @@ router.post('/', async (req, res) => {
     };
 
     // Save to Firestore
+    if (isDevelopment) {
+      console.log('[ENROLL] Saving to Firestore...');
+    }
+    
     await db.collection('proofs').doc(proofId).set(proofData);
+    
+    if (isDevelopment) {
+      console.log('[ENROLL] Successfully saved to Firestore');
+      console.log('[ENROLL] Proof ID:', proofId);
+    }
 
     res.json({
       proof_id: proofId,
@@ -86,7 +112,15 @@ router.post('/', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Enroll error:', error);
+    console.error('[ENROLL ERROR]', new Date().toISOString());
+    console.error('[ENROLL ERROR] Message:', error.message);
+    if (isDevelopment) {
+      console.error('[ENROLL ERROR] Stack:', error.stack);
+      if (error.code) {
+        console.error('[ENROLL ERROR] Error code:', error.code);
+      }
+      console.error('[ENROLL ERROR] Request body:', JSON.stringify(req.body, null, 2));
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

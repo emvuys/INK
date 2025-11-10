@@ -28,7 +28,15 @@ router.get('/jwks.json', (req, res) => {
       ]
     });
   } catch (error) {
-    console.error('JWKS error:', error);
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    console.error('[JWKS ERROR]', new Date().toISOString());
+    console.error('[JWKS ERROR] Message:', error.message);
+    if (isDevelopment) {
+      console.error('[JWKS ERROR] Stack:', error.stack);
+      if (error.code) {
+        console.error('[JWKS ERROR] Error code:', error.code);
+      }
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

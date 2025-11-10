@@ -47,7 +47,16 @@ router.get('/:proofId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Retrieve error:', error);
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    console.error('[RETRIEVE ERROR]', new Date().toISOString());
+    console.error('[RETRIEVE ERROR] Message:', error.message);
+    if (isDevelopment) {
+      console.error('[RETRIEVE ERROR] Stack:', error.stack);
+      if (error.code) {
+        console.error('[RETRIEVE ERROR] Error code:', error.code);
+      }
+      console.error('[RETRIEVE ERROR] Request params:', JSON.stringify(req.params, null, 2));
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -1,0 +1,500 @@
+openapi: 3.0.3
+info:
+  title: INK NFS Backend API
+  description: |
+    API for INK's Near Field Signature (NFS) delivery verification system.
+    This API enables luxury merchants to verify package deliveries using NFC tags, GPS validation, and cryptographic proofs.
+  version: 1.0.0
+  contact:
+    name: INK Development Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://193.57.137.90:8000
+    description: Production server
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: Public key and cryptographic endpoints
+  - name: Enrollment
+    description: Package enrollment endpoints
+  - name: Verification
+    description: Delivery verification endpoints
+  - name: Retrieval
+    description: Proof retrieval endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the server is running
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-01T12:00:00.000Z"
+
+  /.well-known/jwks.json:
+    get:
+      tags:
+        - Authentication
+      summary: Get public key (JWKS)
+      description: |
+        Get the Ed25519 public key in JWKS (JSON Web Key Set) format.
+        This key is used to verify cryptographic signatures.
+      operationId: getJwks
+      responses:
+        '200':
+          description: Public key in JWKS format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JWKS'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /enroll:
+    post:
+      tags:
+        - Enrollment
+      summary: Enroll package
+      description: |
+        Register a new package at shipment time.
+        This endpoint generates a proof record and cryptographic signature.
+      operationId: enrollPackage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollRequest'
+            examples:
+              basic:
+                summary: Basic enrollment
+                value:
+                  order_id: "ORDER-12345"
+                  nfc_uid: "04:1A:2B:3C:4D:5E:6F"
+                  nfc_token: "token_test_abc123"
+                  photo_urls:
+                    - "https://example.com/photo1.jpg"
+                    - "https://example.com/photo2.jpg"
+                    - "https://example.com/photo3.jpg"
+                    - "https://example.com/photo4.jpg"
+                  photo_hashes:
+                    - "hash1234567890abcdef"
+                    - "hash2234567890abcdef"
+                    - "hash3234567890abcdef"
+                    - "hash4234567890abcdef"
+                  shipping_address_gps:
+                    lat: 40.7128
+                    lng: -74.0060
+                  customer_phone_last4: "1234"
+                  warehouse_gps:
+                    lat: 40.7580
+                    lng: -73.9855
+      responses:
+        '200':
+          description: Package enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify:
+    post:
+      tags:
+        - Verification
+      summary: Verify delivery
+      description: |
+        Verify package delivery when customer taps NFC tag.
+        This endpoint calculates GPS distance, validates phone (if needed), and generates delivery signature.
+      operationId: verifyDelivery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+            examples:
+              autoVerify:
+                summary: Auto verify (distance ≤ 100m)
+                value:
+                  nfc_token: "token_test_abc123"
+                  delivery_gps:
+                    lat: 40.7129
+                    lng: -74.0061
+                  device_info: "iPhone 14 Pro, iOS 17"
+              phoneVerify:
+                summary: Phone verification required (distance > 100m)
+                value:
+                  nfc_token: "token_test_abc123"
+                  delivery_gps:
+                    lat: 40.8000
+                    lng: -74.1000
+                  device_info: "iPhone 14 Pro, iOS 17"
+                  phone_last4: "1234"
+      responses:
+        '200':
+          description: Delivery verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /retrieve/{proofId}:
+    get:
+      tags:
+        - Retrieval
+      summary: Retrieve proof
+      description: Retrieve complete proof record by proof_id
+      operationId: retrieveProof
+      parameters:
+        - name: proofId
+          in: path
+          required: true
+          description: Proof ID from enrollment response
+          schema:
+            type: string
+            example: "proof_abc123def456"
+      responses:
+        '200':
+          description: Proof record retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    GPS:
+      type: object
+      required:
+        - lat
+        - lng
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          description: Latitude
+          example: 40.7128
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          description: Longitude
+          example: -74.0060
+
+    EnrollRequest:
+      type: object
+      required:
+        - order_id
+        - nfc_uid
+        - nfc_token
+        - photo_urls
+        - photo_hashes
+        - shipping_address_gps
+      properties:
+        order_id:
+          type: string
+          description: Shopify order ID
+          example: "ORDER-12345"
+        nfc_uid:
+          type: string
+          description: NFC tag UID
+          example: "04:1A:2B:3C:4D:5E:6F"
+        nfc_token:
+          type: string
+          description: Unique NFC token
+          example: "token_test_abc123"
+        photo_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+          minItems: 4
+          maxItems: 4
+          description: Array of exactly 4 photo URLs
+          example:
+            - "https://example.com/photo1.jpg"
+            - "https://example.com/photo2.jpg"
+            - "https://example.com/photo3.jpg"
+            - "https://example.com/photo4.jpg"
+        photo_hashes:
+          type: array
+          items:
+            type: string
+          minItems: 4
+          maxItems: 4
+          description: Array of exactly 4 SHA-256 hashes (one per photo)
+          example:
+            - "hash1234567890abcdef"
+            - "hash2234567890abcdef"
+            - "hash3234567890abcdef"
+            - "hash4234567890abcdef"
+        shipping_address_gps:
+          $ref: '#/components/schemas/GPS'
+        customer_phone_last4:
+          type: string
+          pattern: '^\d{4}$'
+          description: Last 4 digits of customer phone number
+          example: "1234"
+        warehouse_gps:
+          $ref: '#/components/schemas/GPS'
+
+    EnrollResponse:
+      type: object
+      properties:
+        proof_id:
+          type: string
+          description: Unique proof ID
+          example: "proof_abc123def456"
+        enrollment_status:
+          type: string
+          enum: [enrolled]
+          example: "enrolled"
+        key_id:
+          type: string
+          description: Key ID used for signature
+          example: "key_001"
+
+    VerifyRequest:
+      type: object
+      required:
+        - nfc_token
+        - delivery_gps
+      properties:
+        nfc_token:
+          type: string
+          description: NFC token from enrollment
+          example: "token_test_abc123"
+        delivery_gps:
+          $ref: '#/components/schemas/GPS'
+        device_info:
+          type: string
+          description: Device information
+          example: "iPhone 14 Pro, iOS 17"
+        phone_last4:
+          type: string
+          pattern: '^\d{4}$'
+          description: Last 4 digits of phone (required if distance > 100m)
+          example: "1234"
+
+    VerifyResponse:
+      type: object
+      properties:
+        proof_id:
+          type: string
+          description: Proof ID
+          example: "proof_abc123def456"
+        verification_status:
+          type: string
+          enum: [verified]
+          example: "verified"
+        gps_verdict:
+          type: string
+          enum: [pass, near, flagged]
+          description: |
+            GPS verification verdict:
+            - pass: Distance ≤ 100m
+            - near: Distance 100-300m
+            - flagged: Distance > 300m
+          example: "pass"
+        distance_meters:
+          type: integer
+          description: Distance in meters
+          example: 11
+        signature:
+          type: string
+          description: Ed25519 signature (hex encoded)
+          example: "abc123def456..."
+        verify_url:
+          type: string
+          format: uri
+          description: URL to view proof
+          example: "https://in.ink/verify/proof_abc123def456"
+
+    ProofResponse:
+      type: object
+      properties:
+        proof_id:
+          type: string
+          example: "proof_abc123def456"
+        order_id:
+          type: string
+          description: Masked order ID (for privacy)
+          example: "ORD123***45"
+        enrollment:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            shipping_address_gps:
+              $ref: '#/components/schemas/GPS'
+            warehouse_gps:
+              $ref: '#/components/schemas/GPS'
+            photo_urls:
+              type: array
+              items:
+                type: string
+                format: uri
+            photo_hashes:
+              type: array
+              items:
+                type: string
+        delivery:
+          type: object
+          nullable: true
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            delivery_gps:
+              $ref: '#/components/schemas/GPS'
+            device_info:
+              type: string
+            gps_verdict:
+              type: string
+              enum: [pass, near, flagged]
+            phone_verified:
+              type: boolean
+        signature:
+          type: string
+          description: Ed25519 signature (hex encoded)
+        public_key:
+          type: string
+          description: Public key (hex encoded)
+        key_id:
+          type: string
+          example: "key_001"
+
+    JWKS:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty:
+                type: string
+                example: "OKP"
+              crv:
+                type: string
+                example: "Ed25519"
+              kid:
+                type: string
+                example: "key_001"
+              x:
+                type: string
+                description: Base64url encoded public key
+              use:
+                type: string
+                example: "sig"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        requires_phone:
+          type: boolean
+          description: Whether phone verification is required (verify endpoint only)
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingFields:
+              value:
+                error: "Missing required fields"
+            invalidPhotos:
+              value:
+                error: "Exactly 4 photos required"
+            duplicateToken:
+              value:
+                error: "NFC token already enrolled"
+            phoneRequired:
+              value:
+                error: "Phone verification required"
+                requires_phone: true
+            alreadyVerified:
+              value:
+                error: "Already verified"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            phoneVerificationFailed:
+              value:
+                error: "Phone verification failed"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidToken:
+              value:
+                error: "Invalid token"
+            proofNotFound:
+              value:
+                error: "Proof not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Internal server error"
+

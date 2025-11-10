@@ -1,26 +1,35 @@
 ### INK NFS Backend API Tests
-### IntelliJ IDEA HTTP Client format
+### IntelliJ IDEA HTTP Client format / VS Code REST Client
 ### Click the green arrow next to each request to run it
+###
+### For IntelliJ IDEA:
+### 1. Select environment: production or local (top right corner)
+### 2. Or create http-client.env.json file (already created)
+###
+### For VS Code REST Client:
+### 1. Variables are defined below using @variable = value syntax
+### 2. Use {{variable}} in requests
 
-### Variables - Define at the top of the file
-@baseUrl = http://localhost:8000
+### Variables (VS Code REST Client)
+@baseUrl = http://193.57.137.90:8000
+@localUrl = http://localhost:8000
 @contentType = application/json
 
 ###
 
 ### 1. Health Check
-GET http://localhost:8000/health
+GET {{baseUrl}}/health
 
 ### 2. Get Public Key (JWKS)
-GET http://localhost:8000/.well-known/jwks.json
+GET {{baseUrl}}/.well-known/jwks.json
 
 ### 3. Enroll Package - Register new package
-POST http://localhost:8000/enroll
-Content-Type: application/json
+POST {{baseUrl}}/enroll
+Content-Type: {{contentType}}
 
 {
   "order_id": "ORDER-12345",
-  "nfc_uid": "04:1A:2B:3C:4D:5E:6F",
+  "nfc_uid": "04:1A:2B:3C:4D:5E:01",
   "nfc_token": "token_test_abc123",
   "photo_urls": [
     "https://example.com/photo1.jpg",
@@ -46,8 +55,8 @@ Content-Type: application/json
 }
 
 ### 4. Verify Delivery - GPS distance < 100m (auto pass)
-POST http://localhost:8000/verify
-Content-Type: application/json
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
 
 {
   "nfc_token": "token_test_abc123",
@@ -59,8 +68,8 @@ Content-Type: application/json
 }
 
 ### 5. Verify Delivery - GPS distance > 100m (requires phone)
-POST http://localhost:8000/verify
-Content-Type: application/json
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
 
 {
   "nfc_token": "token_test_abc123",
@@ -73,11 +82,11 @@ Content-Type: application/json
 }
 
 ### 6. Retrieve Proof - Replace with actual proof_id from enroll response
-GET http://localhost:8000/retrieve/proof_ba1687858ce850506a26db2f
+GET {{baseUrl}}/retrieve/proof_ba1687858ce850506a26db2f
 
 ### 7. Test Error - Invalid token
-POST http://localhost:8000/verify
-Content-Type: application/json
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
 
 {
   "nfc_token": "invalid_token_xyz",
@@ -88,9 +97,107 @@ Content-Type: application/json
 }
 
 ### 8. Test Error - Missing required fields
-POST http://localhost:8000/enroll
-Content-Type: application/json
+POST {{baseUrl}}/enroll
+Content-Type: {{contentType}}
 
 {
   "order_id": "ORDER-12345"
 }
+
+### 9. Test Error - Duplicate enrollment (same nfc_token)
+POST {{baseUrl}}/enroll
+Content-Type: {{contentType}}
+
+{
+  "order_id": "ORDER-99999",
+  "nfc_uid": "04:1A:2B:3C:4D:5E:6F",
+  "nfc_token": "token_test_abc123",
+  "photo_urls": [
+    "https://example.com/photo1.jpg",
+    "https://example.com/photo2.jpg",
+    "https://example.com/photo3.jpg",
+    "https://example.com/photo4.jpg"
+  ],
+  "photo_hashes": [
+    "hash1234567890abcdef",
+    "hash2234567890abcdef",
+    "hash3234567890abcdef",
+    "hash4234567890abcdef"
+  ],
+  "shipping_address_gps": {
+    "lat": 40.7128,
+    "lng": -74.0060
+  },
+  "customer_phone_last4": "1234",
+  "warehouse_gps": {
+    "lat": 40.7580,
+    "lng": -73.9855
+  }
+}
+
+### 10. Test Error - Already verified (verify same token twice)
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 40.7129,
+    "lng": -74.0061
+  },
+  "device_info": "iPhone 14 Pro, iOS 17"
+}
+
+### 11. Test Error - Phone verification failed (wrong phone)
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 40.8000,
+    "lng": -74.1000
+  },
+  "device_info": "iPhone 14 Pro, iOS 17",
+  "phone_last4": "9999"
+}
+
+### 12. Test GPS distance 100-300m (near verdict)
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 40.7135,
+    "lng": -74.0070
+  },
+  "device_info": "iPhone 14 Pro, iOS 17",
+  "phone_last4": "1234"
+}
+
+### 13. Test GPS distance > 300m (flagged verdict)
+POST {{baseUrl}}/verify
+Content-Type: {{contentType}}
+
+{
+  "nfc_token": "token_test_abc123",
+  "delivery_gps": {
+    "lat": 41.0000,
+    "lng": -74.5000
+  },
+  "device_info": "iPhone 14 Pro, iOS 17",
+  "phone_last4": "1234"
+}
+
+### 14. Test Error - Invalid proof_id
+GET {{baseUrl}}/retrieve/invalid_proof_id_12345
+
+###
+### Instructions:
+### 1. To test on local server, change @baseUrl to: @baseUrl = http://localhost:8000
+### 2. To test on production server, use: @baseUrl = http://193.57.137.90:8000
+### 3. Run tests in order: Enroll → Verify → Retrieve
+### 4. Copy proof_id from enroll response and use it in retrieve test
+### 5. Each test token can only be verified once
+###
